@@ -1,0 +1,289 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+```{r}
+#install.packages("factoextra")
+#install.packages("fpc")
+#install.packages("dbscan")
+#install.packages("heatmaply")
+library(factoextra)
+library(fpc)
+library(dbscan)
+library(rio)
+library(factoextra)
+library(corrplot)
+library(DescTools)
+library(EnvStats)
+library(outliers)
+library(fpc)
+
+library(DataCombine)
+library(heatmaply)
+
+```
+
+---
+Описание данных:
+датасет представляет характеристики 800 покеменов: есть легендарные и не легендарные персонажи, я решил сконцентрироваться на нелегендарных переменных, их большее количество.
+Наша задача понять на какое количество групп можно разделить персонажей, исходя из их характеристик 
+---
+```{r}
+
+
+```
+
+
+```{r}
+df <- import("Pokemon.csv")
+```
+
+```{r}
+newData = df[,c(-3,-4,-5,-12)]
+#убираем не числовые переменные
+dl = x <- newData[newData$Legendary == FALSE, ]
+#убираем легендарных персонажей
+dl <- DropNA(dl)
+```
+
+описательный анализ 
+
+```{r}
+
+```
+
+```{r}
+
+df2 <- dl[, c(3:8)]
+summaryStats(df2)
+
+```
+
+
+```{r}
+
+sd(df2$HP)
+sd(df2$Attack)
+sd(df2$Defense)
+sd(df2$`Sp. Atk`)
+sd(df2$`Sp. Def`)
+sd(df2$Speed)
+
+
+
+```
+
+```{r}
+CoefVar(df2$HP)*100
+CoefVar(df2$Attack)*100
+CoefVar(df2$Defense)*100
+CoefVar(df2$`Sp. Atk`)*100
+CoefVar(df2$`Sp. Def`)*100
+CoefVar(df2$Speed)*100
+#Коэффициент корреляции говорит о большом разбросе данных
+```
+
+
+
+
+```{r}
+
+hist(df2$HP)
+hist(df2$Attack)
+hist(df2$Defense)
+hist(df2$`Sp. Atk`)
+hist(df2$`Sp. Def`)
+hist(df2$Speed)
+#видно что наши переменные смещенны влево, особобенно 5ая, поэтому не повредит провести логарефмирование 
+```
+
+
+```{r}
+hist(log(df2$HP))
+hist(log(df2$Attack))
+hist(log(df2$Defense))
+hist(log(df2$`Sp. Atk`))
+hist(log(df2$`Sp. Def`))
+hist(log(df2$Speed))
+#Видно, что логарефмирование улучшило распределенение там, где нужно, а где не сильно нужно, не ухудшило
+#В целом можно сказать, что распределения близки к нормальному, что дает нам основание проводить анализ дальше
+#здесь стоит сказать, что распределение характеристик весьма похоже, для них всех характерен сдвиг вправо, то есть  значительно сильных героев меньше, чем значительно слабых, однако распределения не далеки от нормальных
+```
+
+```{r}
+boxplot.stats(df2$HP, coef = 3)$out#есть
+boxplot.stats(df2$Attack, coef = 3)$out
+boxplot.stats(df2$Defense, coef = 3)$out#3есть
+boxplot.stats(df2$`Sp. Atk`, coef = 3)$out
+boxplot.stats(df2$`Sp. Def`, coef = 3)$out
+boxplot.stats(df2$Speed, coef = 3)$out#есть
+boxplot(df2)
+#здесь видно, что у нас имеются подозрительные значение, поэтому стоит почистить переменные от выбросов.
+```
+
+```{r}
+
+df2
+df2 = df2[df2$HP < 169,]
+df2 = df2[df2$Defense < 200,]
+boxplot(df2)
+#удаляем выбросы
+```
+
+
+
+```{r}
+
+cor_m1 <- cor(log(df2))#проводим корреляцию для логарифмированных данных
+cor_m1
+res
+res <- cor.mtest(log(df3), conf.level = 0.95)
+corrplot(cor_m1, p.mat = res$p, sig.level = 0.05)
+#мы видим мультиколлениарность
+#в последующем анализе будем использовать только те переменными, между которыми корреляция значительно не превышает 0,5
+df2 = df2[,c(-4,-5)]#убираем переменные sp.atk и sp.def
+
+```
+
+```{r}
+df3 = normalize(log(df2))#нормализирование данных
+df4 = as.data.frame(scale(log(df2)))#стандартизирование 
+df5 = as.data.frame(scale(df3))#стандартизирование и нормализирование
+df4
+```
+
+```{r}
+eucl_dist <- dist(df4[sample(rownames(df4), 30),], method = 'euclidian')
+fviz_dist(eucl_dist)
+#смотрим на матрицу расстояний
+```
+
+```{r}
+#Задание 3
+#выбирем меру расстояние
+#Метод Варда
+#количество кластеров будет 
+#Используется Евклидово расстояние
+hclust_w <- hcut(df4, k = 2, hc_metric = 'euclidian', hc_method = 'ward.D2')
+
+fviz_dend(hclust_w,
+          cex = 0.3, # размер подписей
+          color_labels_by_k = TRUE, # выделить объекты цветом по принадлежности к кластерам
+          main = 'Дендрограмма (принцип Варда)', ylab = 'Расстояние')
+```
+
+```{r}
+#Принцип ближнего соседа
+hclust_nn <- hcut(df4, k = 2, hc_metric = 'euclidian', hc_method = 'single')
+fviz_dend(hclust_nn, cex = 0.5, color_labels_by_k = TRUE,
+          main = 'Дендрограмма (принцип ближнего соседа)', ylab = 'Расстояние')
+```
+
+```{r}
+#Метод средней связи
+hclust_av <- hcut(df4, k = 3, hc_metric = 'euclidian', hc_method = 'average')
+fviz_dend(hclust_av, cex = 0.5, color_labels_by_k = TRUE,
+          main = 'Дендрограмма (принцип средней связи)', ylab = 'Расстояние')
+```
+
+```{r}
+#центр тяжести
+hclust_c <- hcut(df5, k = 3, hc_metric = 'euclidian', hc_method = 'centroid')
+fviz_dend(hclust_c, cex = 0.5, color_labels_by_k = TRUE,
+          main = 'Дендрограмма (принцип центра тяжести)', ylab = 'Расстояние')
+```
+Будет выбран метод варда, так как только он дал вменяемый результат 
+```{r}
+#Задание 4
+
+kmeans3 <- kmeans(df4, centers = 2)
+
+plot(1:ncol(df4), kmeans3$centers[1,], type = 'l', col = 'red', lwd = 2, ylim = c(-3, 1.5),
+     ylab = 'Среднее значение признака', xlab = 'Классифицирующий признак', xaxt = 'n')
+lines(1:ncol(df4), kmeans3$centers[1,], type = 'l', col = 'green', lwd = 2)
+lines(1:ncol(df4), kmeans3$centers[2,], type = 'l', col = 'blue', lwd = 2)
+title('График средних (признаки стандартизованы)')
+axis(1, at=1:ncol(df4), labels = colnames(df4), las = 2)
+legend(1, -1.3, c('Кластер 1', 'Кластер 2' ),
+       lwd = c(2, 2, 2, 2), col = c('red', 'green', 'blue'))
+#График средних говорит о том, что кластеризация имеет основание, и деление на два кластера уместно
+```
+
+```{r}
+fviz_nbclust(df4, kmeans, method = 'wss') +
+  labs(x = 'число кластеров', y = 'сумма внутрикластерных дисперсий',
+       title = 'Зависимость WSS от числа кластеров')
+#можно заметить, что график начинает замедляться на втором кластере, значит уместно выделить два кластера
+#Также видно, что данные поддаются кластеризации, т.к убывание вначале сравнительно стремительно
+```
+
+```{r}
+fviz_nbclust(df4, kmeans, method = 'silhouette') +
+  labs(x = 'число кластеров', y = 'средняя ширина силуэта по всем точкам',
+       title = 'Зависимость средней ширины силуэта от числа кластеров')
+#видим экстремум на втором кластере, что подтверждает гипотезу о том, что нужно использовать 2 кластера
+#хочу также отметить, что 2 кластера выделяются явным образом, что говорит об уместности кластеризации
+```
+
+```{r}
+#Задание 5
+#Стандартизированные данные
+#используется евклидово расстояние
+km.res <- kmeans(df4, 2, nstart = 25)
+fviz_cluster(km.res, df4, geom = "point")
+
+```
+
+```{r}
+plot(1:ncol(df4), km.res$centers[1,], type = 'l', col = 'red', lwd = 2, ylim = c(-3, 1.5),
+     ylab = 'Среднее значение признака', xlab = 'Классифицирующий признак', xaxt = 'n')
+lines(1:ncol(df4), km.res$centers[1,], type = 'l', col = 'green', lwd = 2)
+lines(1:ncol(df4), km.res$centers[2,], type = 'l', col = 'blue', lwd = 2)
+title('График средних (признаки стандартизованы)')
+axis(1, at=1:ncol(df4), labels = colnames(df4), las = 2)
+legend(1, -1.3, c('Кластер 1', 'Кластер 2' ),
+       lwd = c(2, 2, 2, 2), col = c('red', 'green', 'blue'))
+```
+
+
+
+```{r}
+#Нормализиванные данные
+#выводы ниже
+#используется евклидово расстояние
+kmeans4 <- kmeans(df3, centers = 2)
+```
+
+```{r}
+plot(1:ncol(df3), kmeans4$centers[1,], type = 'l', col = 'red', lwd = 2, ylim = c(-3, 1.5),
+     ylab = 'Среднее значение признака', xlab = 'Классифицирующий признак', xaxt = 'n')
+lines(1:ncol(df4), kmeans4$centers[1,], type = 'l', col = 'green', lwd = 2)
+lines(1:ncol(df4), kmeans4$centers[2,], type = 'l', col = 'blue', lwd = 2)
+title('График средних (признаки стандартизованы)')
+axis(1, at=1:ncol(df4), labels = colnames(df4), las = 2)
+legend(1, -1.3, c('Кластер 1', 'Кластер 2' ),
+       lwd = c(2, 2, 2, 2), col = c('blue', 'green'))
+```
+
+```{r}
+fviz_cluster(object = kmeans4, data = df3,
+             ellipse.type = 'convex', geom = 'point',
+             main = 'Кластеры университетов в пространстве первых двух главных компонент')
+```
+```{r}
+fviz_nbclust(df3, kmeans, method = 'silhouette') +
+  labs(x = 'число кластеров', y = 'средняя ширина силуэта по всем точкам',
+       title = 'Зависимость средней ширины силуэта от числа кластеров')
+#видим экстремум на втором кластере, что подтверждает гипотезу о том, что нужно использовать 2 кластера
+```
+
+Здесь заметим, что нормализованные данные показывают смешение, а графики средних очень близки друг к другу, в случае нормализованных данных, это нам говорит о том, что необходимо использовать стандартизированные данные
+
+
+Описание кластеров и итоги работы:
+Нами были выделены два кластера, лучше всего использовать либо метод Варда или kmeans для стандаризированных данным. Дендограмма также показывает наличие двух кластеров
+
+Анализ задачи:
+Наши два кластера могут быть обусловленны делением героев на слабых и не слабых(возможно, сильных), у первых все характериситики сравнительно малы, у вторых велики.
